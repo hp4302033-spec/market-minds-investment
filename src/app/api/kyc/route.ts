@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-/* ────────────────────────────────────────────────────────────────
- * KYC / PAN Validation API — Agent 7
- * Provider : RapidAPI — India PAN Validator
- * Host     : india-pan-validator.p.rapidapi.com
- * Method   : GET /validate?pan=<PAN>
- * ────────────────────────────────────────────────────────────────*/
+/* ─────────────────────────────────────────────────────────────────
+ * KYC / PAN Status API — Agent 7
+ * Provider  : Digio DigiKYC — KRA Check PAN Status API
+ * Docs      : https://documentation.digio.in/digikyc/kra/api_integration/check_pan_status/
+ *
+ * Auth      : HTTP Basic Auth  →  Base64(client_id:client_secret)
+ * Method    : POST
+ * Endpoint  : {DIGIO_BASE_URL}/v2/client/kyc/pan-status
+ * Body      : { "pan": "ABCDE1234F" }
+ *
+ * Response  : KYC Status is provided in 3 digits.
+ *   - 1st digit = KRA where record exists
+ *     (1=CVL, 2=NDML, 3=DOTEX, 4=CAMS, 5=Karvy)
+ *   - 2nd digit = KYC status  (1=Verified, 2=Pending, 3=Rejected, 0=Not Found)
+ *   - 3rd digit = KYC type    (1=Normal, 2=Simplified)
+ *
+ * Get credentials at: https://app.digio.in/#/register
+ * Base URLs: https://documentation.digio.in/digienvironments
+ *   Sandbox : https://ext.digio.in:444
+ *   Prod    : https://api.digio.in
+ * ─────────────────────────────────────────────────────────────────*/
 
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-
-const RAPIDAPI_HOST = process.env.RAPIDAPI_KYC_HOST || 'india-pan-validator.p.rapidapi.com';
 
 const ENTITY_TYPES: Record<string, string> = {
   P: 'Individual (Person)',
@@ -24,41 +37,68 @@ const ENTITY_TYPES: Record<string, string> = {
   T: 'Trust / NGO',
 };
 
-/* ── Map raw API response → our KYCResult shape ──────────────────*/
-function mapApiResponse(pan: string, raw: Record<string, unknown>) {
+/* KRA code → registrar name */
+const KRA_NAMES: Record<string, string> = {
+  '1': 'CVL (CDSL Ventures)',
+  '2': 'NDML (NSDL Database)',
+  '3': 'DOTEX (BSE)',
+  '4': 'CAMS',
+  '5': 'Karvy / KFintech',
+};
+
+/* ── Parse Digio 3-digit KYC status code ─────────────────────────*/
+function parseDigioStatus(code: string | undefined): {
+  kra: string;
+  status: 'verified' | 'pending' | 'not_found';
+  statusLabel: string;
+  kycType: string;
+} {
+  if (!code || code.length < 2) {
+    return { kra: 'Unknown', status: 'not_found', statusLabel: 'Not Found', kycType: 'N/A' };
+  }
+  const kraDigit  = code[0] || '0';
+  const statusDigit = code[1] || '0';
+  const typeDigit = code[2] || '1';
+
+  const kra = KRA_NAMES[kraDigit] || 'Unknown Registry';
+  const kycType = typeDigit === '2' ? 'Simplified KYC' : 'Normal KYC';
+
+  let status: 'verified' | 'pending' | 'not_found';
+  let statusLabel: string;
+  switch (statusDigit) {
+    case '1': status = 'verified';  statusLabel = 'Verified';  break;
+    case '2': status = 'pending';   statusLabel = 'Pending';   break;
+    case '3': status = 'not_found'; statusLabel = 'Rejected';  break;
+    default:  status = 'not_found'; statusLabel = 'Not Found'; break;
+  }
+
+  return { kra, status, statusLabel, kycType };
+}
+
+/* ── Map Digio API response → our KYCResult shape ────────────────*/
+function mapDigioResponse(pan: string, raw: Record<string, unknown>) {
   const entityType = ENTITY_TYPES[pan[3]] || 'Individual (Person)';
 
-  // India PAN Validator — typical response fields:
-  // { valid: true/false, pan: "...", name: "...", type: "...", ... }
-  const isValid: boolean =
-    raw['valid'] === true ||
-    raw['isValid'] === true ||
-    String(raw['status']).toUpperCase() === 'VALID' ||
-    String(raw['kyc_status']).toUpperCase() === 'Y';
+  // Digio response fields (typical):
+  // { kyc_status: "110", name: "RAHUL SHARMA", dob: "01-01-1990", ... }
+  const kycStatusCode = (raw['kyc_status'] as string) || (raw['kycStatus'] as string) || '';
+  const { kra, status, kycType } = parseDigioStatus(kycStatusCode);
 
-  const isInvalid: boolean =
-    raw['valid'] === false ||
-    raw['isValid'] === false ||
-    String(raw['status']).toUpperCase() === 'INVALID';
-
-  let overallStatus: 'verified' | 'pending' | 'not_found';
-  if (isValid)   overallStatus = 'verified';
-  else if (isInvalid) overallStatus = 'not_found';
-  else           overallStatus = 'pending';
-
-  // Extract name from various possible field names
   const name: string =
     (raw['name'] as string) ||
     (raw['applicant_name'] as string) ||
-    (raw['holder_name'] as string) ||
     (raw['pan_name'] as string) ||
     '—';
 
-  // Extract dates
+  const dob: string =
+    (raw['dob'] as string) ||
+    (raw['date_of_birth'] as string) ||
+    '—';
+
   const registeredOn: string =
+    (raw['kyc_date'] as string) ||
     (raw['reg_date'] as string) ||
     (raw['registration_date'] as string) ||
-    (raw['issue_date'] as string) ||
     '—';
 
   const lastUpdated: string =
@@ -66,35 +106,33 @@ function mapApiResponse(pan: string, raw: Record<string, unknown>) {
     (raw['last_updated'] as string) ||
     registeredOn;
 
-  // Verification sources
-  const verifiedWith: string[] = isValid
-    ? ['Income Tax Department', 'NSDL']
-    : [];
+  const verifiedWith: string[] = status === 'verified' ? [kra, 'Income Tax Department'] : [];
 
-  const remarks: Record<typeof overallStatus, string> = {
+  const remarks: Record<typeof status, string> = {
     verified:
-      `PAN ${pan} has been successfully validated by the Income Tax Department. ` +
-      `The PAN is active and linked to a registered ${entityType.toLowerCase()}. ` +
-      `You are eligible to invest in Mutual Funds, Stocks, Bonds, and other SEBI-regulated instruments.`,
+      `PAN ${pan} is KYC verified with ${kra}. The KYC type is ${kycType}. ` +
+      `You are fully eligible to invest in Mutual Funds, Stocks, Bonds, and all SEBI-regulated financial instruments without any additional KYC requirements.`,
     pending:
-      `PAN ${pan} was found but its KYC verification status could not be confirmed at this time. ` +
-      `Please ensure your PAN is linked with Aadhaar on the Income Tax portal (incometax.gov.in). ` +
-      `For full KYC, visit your nearest bank branch or use an online KYC portal.`,
+      `KYC for PAN ${pan} is currently pending with ${kra}. ` +
+      `Your KYC application has been received but verification is in progress. This typically takes 2–5 business days. ` +
+      `Please ensure your PAN is linked with Aadhaar on the Income Tax portal (incometax.gov.in).`,
     not_found:
-      `PAN ${pan} could not be validated. This may mean the PAN does not exist, has been deactivated, ` +
-      `or the format is incorrect. Please verify your PAN card details and try again. ` +
-      `For official verification, visit the Income Tax e-filing portal (incometax.gov.in).`,
+      `No KYC record was found for PAN ${pan} across CAMS, Karvy, CVL, NDML, and DOTEX registries. ` +
+      `Please complete your KYC by visiting your nearest bank, AMC office, or using an online KYC portal ` +
+      `with your Aadhaar and PAN card.`,
   };
 
   return {
-    status: overallStatus,
+    status,
     pan,
-    name: overallStatus === 'not_found' ? '—' : (name || '—'),
+    name: status === 'not_found' ? '—' : (name || '—'),
     entityType,
-    registeredOn: overallStatus === 'not_found' ? '—' : (registeredOn || '—'),
-    lastUpdated: overallStatus === 'not_found' ? '—' : (lastUpdated || '—'),
+    dob: status !== 'not_found' ? dob : '—',
+    registeredOn: status !== 'not_found' ? registeredOn : '—',
+    lastUpdated: status !== 'not_found' ? lastUpdated : '—',
     verifiedWith,
-    remark: remarks[overallStatus],
+    remark: remarks[status],
+    kycStatusCode: kycStatusCode || 'N/A',
   };
 }
 
@@ -114,55 +152,71 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    /* ── 2. Check API key ───────────────────────── */
-    const apiKey = process.env.RAPIDAPI_KYC_KEY;
-    if (!apiKey) {
-      console.error('RAPIDAPI_KYC_KEY not set');
-      return NextResponse.json({ success: false, error: 'KYC service not configured.' }, { status: 503 });
+    /* ── 2. Get Digio credentials ───────────────── */
+    const clientId     = process.env.DIGIO_CLIENT_ID;
+    const clientSecret = process.env.DIGIO_CLIENT_SECRET;
+    const baseUrl      = process.env.DIGIO_BASE_URL || 'https://ext.digio.in:444'; // sandbox default
+
+    if (!clientId || !clientSecret) {
+      console.warn('Digio credentials not configured — returning format validation only');
+      // Graceful degradation: return format-only result so UI still works
+      return NextResponse.json({
+        success: true,
+        result: {
+          status: 'pending',
+          pan,
+          name: '—',
+          entityType: ENTITY_TYPES[pan[3]] || 'Individual (Person)',
+          dob: '—',
+          registeredOn: '—',
+          lastUpdated: '—',
+          verifiedWith: [],
+          remark:
+            `PAN format for ${pan} is valid (${ENTITY_TYPES[pan[3]] || 'Individual'}). ` +
+            `Live KYC status check requires Digio API credentials. ` +
+            `Register at https://app.digio.in/#/register to enable real-time verification.`,
+          kycStatusCode: 'N/A',
+          note: 'Configure DIGIO_CLIENT_ID and DIGIO_CLIENT_SECRET for live KYC checks.',
+        },
+      });
     }
 
-    /* ── 3. Call India PAN Validator API ───────── */
-    // GET /validate with pan as query param
-    const url = `https://${RAPIDAPI_HOST}/validate?pan=${encodeURIComponent(pan)}`;
+    /* ── 3. Build Basic Auth header ─────────────── */
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
-    const apiResponse = await fetch(url, {
-      method: 'GET',
+    /* ── 4. Call Digio KRA Check PAN Status API ─── */
+    const apiResponse = await fetch(`${baseUrl}/v2/client/kyc/pan-status`, {
+      method: 'POST',
       headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': RAPIDAPI_HOST,
+        'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
+      body: JSON.stringify({ pan }),
     });
 
-    if (!apiResponse.ok) {
-      const errText = await apiResponse.text();
-      console.error(`PAN Validator API error ${apiResponse.status}:`, errText);
+    const rawData = await apiResponse.json().catch(() => ({}));
+    console.log(`Digio KYC response [${apiResponse.status}]:`, JSON.stringify(rawData, null, 2));
 
-      if (apiResponse.status === 429) {
+    if (!apiResponse.ok) {
+      const errMsg = (rawData as Record<string, string>)?.message || `Error ${apiResponse.status}`;
+      if (apiResponse.status === 401 || apiResponse.status === 403) {
         return NextResponse.json({
-          success: false,
-          error: 'KYC service rate limit reached. Please try again in a moment.',
-        }, { status: 429 });
-      }
-      if (apiResponse.status === 403) {
-        return NextResponse.json({
-          success: false,
-          error: 'KYC service authentication failed. Please check API key.',
+          success: false, error: 'KYC service authentication failed. Check Digio credentials.',
         }, { status: 403 });
       }
-
+      if (apiResponse.status === 429) {
+        return NextResponse.json({
+          success: false, error: 'KYC service rate limit reached. Please try again in a moment.',
+        }, { status: 429 });
+      }
       return NextResponse.json({
-        success: false,
-        error: `KYC service error (${apiResponse.status}). Please try again.`,
+        success: false, error: `KYC service error: ${errMsg}`,
       }, { status: 502 });
     }
 
-    const rawData = await apiResponse.json();
-    console.log('PAN Validator raw response:', JSON.stringify(rawData, null, 2));
-
-    /* ── 4. Map response → our shape ─────────────── */
-    const result = mapApiResponse(pan, rawData as Record<string, unknown>);
-
+    /* ── 5. Map response → our shape ─────────────── */
+    const result = mapDigioResponse(pan, rawData as Record<string, unknown>);
     return NextResponse.json({ success: true, result }, { status: 200 });
 
   } catch (err) {
@@ -176,13 +230,16 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   return NextResponse.json({
-    service: 'MMI PAN Validation API',
+    service: 'MMI KYC Verification API',
     agent: 'Agent 7',
-    version: '3.0.0',
-    provider: 'RapidAPI — India PAN Validator',
-    host: RAPIDAPI_HOST,
-    endpoint: 'GET /validate?pan=<PAN_NUMBER>',
-    methods: ['POST'],
-    example_body: { pan: 'ABCDE1234F' },
+    version: '4.0.0',
+    provider: 'Digio DigiKYC — KRA Check PAN Status',
+    docs: 'https://documentation.digio.in/digikyc/kra/api_integration/check_pan_status/',
+    endpoint: 'POST /v2/client/kyc/pan-status',
+    auth: 'Basic Auth (DIGIO_CLIENT_ID:DIGIO_CLIENT_SECRET)',
+    sandbox: 'https://ext.digio.in:444',
+    production: 'https://api.digio.in',
+    status_code_format: '3 digits: [KRA][KYC Status][KYC Type]',
+    kra_codes: KRA_NAMES,
   });
 }
