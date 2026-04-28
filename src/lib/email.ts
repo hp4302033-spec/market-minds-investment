@@ -1,6 +1,13 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Gmail SMTP transporter — uses App Password (not your real Gmail password)
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 export interface EmailPayload {
   to: string;
@@ -112,28 +119,20 @@ async function sendWithRetry(payload: EmailPayload, attempts = 3): Promise<{ suc
           }]
         : [];
 
-      const { data, error } = await resend.emails.send({
-        from: 'Market Minds Investment <reports@marketmindsinvestment.com>',
-        to: [payload.to],
+      await transporter.sendMail({
+        from: `"Market Minds Investment" <${process.env.GMAIL_USER}>`,
+        to: payload.to,
         subject: `Your Financial Plan is Ready — ${payload.name} | Market Minds Investment`,
         html: buildEmailHTML(payload),
         attachments,
       });
 
-      if (error) {
-        console.error(`Email attempt ${attempt} failed:`, error);
-        if (attempt < attempts) {
-          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 500));
-          continue;
-        }
-        return { success: false, error: error.message };
-      }
-
-      console.log('Email sent successfully, id:', data?.id);
+      console.log(`Email sent successfully to ${payload.to}`);
       return { success: true };
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`Email attempt ${attempt} exception:`, message);
+      console.error(`Email attempt ${attempt} failed:`, message);
       if (attempt < attempts) {
         await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 500));
         continue;
@@ -145,9 +144,9 @@ async function sendWithRetry(payload: EmailPayload, attempts = 3): Promise<{ suc
 }
 
 export async function sendPlanEmail(payload: EmailPayload): Promise<{ success: boolean; error?: string }> {
-  if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 'your_resend_api_key_here') {
-    console.warn('Resend API key not configured — skipping email send');
-    return { success: false, error: 'Email service not configured yet' };
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn('Gmail credentials not configured — skipping email send');
+    return { success: false, error: 'Email service not configured' };
   }
   return sendWithRetry(payload);
 }
