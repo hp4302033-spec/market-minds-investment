@@ -38,7 +38,7 @@ export interface Lead {
   name: string;
   email: string;
   phone: string;
-  investment_type: 'SIP' | 'LUMPSUM';
+  investment_type: 'SIP' | 'LUMPSUM' | 'SWP';
   amount: number;
   period_years: number;
   expected_return: number;
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS leads (
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
-  investment_type TEXT NOT NULL CHECK (investment_type IN ('SIP', 'LUMPSUM')),
+  investment_type TEXT NOT NULL CHECK (investment_type IN ('SIP', 'LUMPSUM', 'SWP')),
   amount NUMERIC NOT NULL,
   period_years INTEGER NOT NULL,
   expected_return NUMERIC NOT NULL,
