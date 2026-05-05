@@ -10,6 +10,7 @@ interface PDFInput {
   amount: number;
   periodYears: number;
   expectedReturn: number;
+  withdrawalAmount?: number;
   results: CalculationResult;
   advisorNote: string;
 }
@@ -75,7 +76,12 @@ export async function generateAndDownloadPDF(data: PDFInput): Promise<void> {
 
   y += 8;
   setTxt(C.text); doc.setFontSize(14); doc.setFont('helvetica', 'normal');
-  doc.text(data.investmentType === 'SIP' ? 'Systematic Investment Plan' : 'Lump Sum Investment', margin, y);
+  doc.text(
+    data.investmentType === 'SIP' ? 'Systematic Investment Plan'
+    : data.investmentType === 'SWP' ? 'Systematic Withdrawal Plan'
+    : 'Lump Sum Investment',
+    margin, y
+  );
 
   // Client card
   y += 24;
@@ -142,14 +148,25 @@ export async function generateAndDownloadPDF(data: PDFInput): Promise<void> {
 
   drawSectionHeader('Investment Parameters');
 
-  const params: [string, string][] = [
-    ['Investment Type', data.investmentType === 'SIP' ? 'Systematic Investment Plan (SIP)' : 'Lump Sum'],
-    [data.investmentType === 'SIP' ? 'Monthly SIP Amount' : 'Investment Amount', fmtCurrency(data.amount)],
-    ['Investment Period', `${data.periodYears} Years`],
-    ['Expected Annual Return', `${data.expectedReturn}%`],
-    ['CAGR', `${data.results.cagr}%`],
-    ['Wealth Multiplier', `${data.results.wealthMultiplier}x`],
-  ];
+  const isSWP = data.investmentType === 'SWP';
+  const params: [string, string][] = isSWP
+    ? [
+        ['Investment Type', 'Systematic Withdrawal Plan (SWP)'],
+        ['Initial Corpus', fmtCurrency(data.amount)],
+        ['Monthly Withdrawal', fmtCurrency(data.withdrawalAmount ?? 0)],
+        ['Investment Period', `${data.periodYears} Years`],
+        ['Expected Annual Return', `${data.expectedReturn}%`],
+        ['Total Withdrawn', fmtCurrency(data.results.totalWithdrawn ?? 0)],
+        ['Remaining Corpus', fmtCurrency(data.results.remainingCorpus ?? 0)],
+      ]
+    : [
+        ['Investment Type', data.investmentType === 'SIP' ? 'Systematic Investment Plan (SIP)' : 'Lump Sum'],
+        [data.investmentType === 'SIP' ? 'Monthly SIP Amount' : 'Investment Amount', fmtCurrency(data.amount)],
+        ['Investment Period', `${data.periodYears} Years`],
+        ['Expected Annual Return', `${data.expectedReturn}%`],
+        ['CAGR', `${data.results.cagr}%`],
+        ['Wealth Multiplier', `${data.results.wealthMultiplier}x`],
+      ];
 
   params.forEach(([label, value], i) => {
     const bg: RGB = i % 2 === 0 ? C.navy : [12, 19, 37];

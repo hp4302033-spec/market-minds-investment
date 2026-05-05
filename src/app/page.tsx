@@ -149,6 +149,7 @@ export default function HomePage() {
   const [formData, setFormData] = useState<{
     name: string; email: string; phone: string; investmentType: string;
     amount: number; periodYears: number; expectedReturn: number;
+    withdrawalAmount: number;
   } | null>(null);
   const [submitError, setSubmitError] = useState('');
   const dashboardRef = useRef<HTMLDivElement>(null);
@@ -160,8 +161,9 @@ export default function HomePage() {
 
   const handleFormSubmit = async (data: {
     name: string; email: string; phone: string;
-    investmentType: 'SIP' | 'LUMPSUM';
+    investmentType: 'SIP' | 'LUMPSUM' | 'SWP';
     amount: string; periodYears: string; expectedReturn: string;
+    withdrawalAmount: string;
   }) => {
     setLoading(true);
     setSubmitError('');
@@ -174,6 +176,7 @@ export default function HomePage() {
           amount: parseFloat(data.amount),
           periodYears: parseInt(data.periodYears),
           expectedReturn: parseFloat(data.expectedReturn),
+          withdrawalAmount: parseFloat(data.withdrawalAmount || '0'),
         }),
       });
       const json: SubmitResponse = await res.json();
@@ -185,6 +188,7 @@ export default function HomePage() {
           amount: parseFloat(data.amount),
           periodYears: parseInt(data.periodYears),
           expectedReturn: parseFloat(data.expectedReturn),
+          withdrawalAmount: parseFloat(data.withdrawalAmount || '0'),
         });
         setPhase('results');
         setTimeout(() => {
@@ -421,6 +425,7 @@ export default function HomePage() {
                       name: formData.name, email: formData.email, phone: formData.phone,
                       investmentType: formData.investmentType,
                       amount: formData.amount, periodYears: formData.periodYears, expectedReturn: formData.expectedReturn,
+                      withdrawalAmount: formData.withdrawalAmount,
                       results: resultsData.results,
                       advisorNote: resultsData.advisorNote || '',
                       emailSent: resultsData.emailSent || false,

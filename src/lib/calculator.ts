@@ -1,15 +1,16 @@
 export interface CalculationInput {
-  investmentType: 'SIP' | 'LUMPSUM';
-  amount: number;           // monthly SIP or one-time lump sum
+  investmentType: 'SIP' | 'LUMPSUM' | 'SWP';
+  amount: number;           // monthly SIP / one-time lump sum / initial corpus (SWP)
   periodYears: number;
   expectedReturn: number;   // annual % rate
+  withdrawalAmount?: number; // SWP: fixed monthly withdrawal
 }
 
 export interface YearlyBreakdown {
   year: number;
-  invested: number;
-  value: number;
-  returns: number;
+  invested: number;   // SIP: cumulative | LUMPSUM: constant | SWP: initial corpus
+  value: number;      // portfolio / corpus value at end of year
+  returns: number;    // SIP/LUMPSUM: total returns | SWP: cumulative withdrawn
   growthPercent: number;
 }
 
@@ -20,6 +21,10 @@ export interface CalculationResult {
   yearlyBreakdown: YearlyBreakdown[];
   cagr: number;
   wealthMultiplier: number;
+  // SWP-specific (undefined for SIP/LUMPSUM)
+  totalWithdrawn?: number;
+  remainingCorpus?: number;
+  corpusDepletesAtYear?: number | null;
 }
 
 /**
@@ -30,15 +35,10 @@ export interface CalculationResult {
  *
  * Final Value (annuity-due — payments at START of each month):
  *   FV = P × [((1 + r)^n - 1) / r] × (1 + r)
- *
- * Proof match (₹10,000/mo, 13%, 10yr):
- *   r = (1.13)^(1/12) - 1 ≈ 0.010237
- *   FV ≈ ₹23,63,111  ✅ matches Groww exactly
  */
 export function calculateSIP(input: CalculationInput): CalculationResult {
   const { amount, periodYears, expectedReturn } = input;
 
-  // Geometric monthly rate — Groww / Zerodha standard
   const annualRate = expectedReturn / 100;
   const r = Math.pow(1 + annualRate, 1 / 12) - 1;
   const n = periodYears * 12;
@@ -52,15 +52,11 @@ export function calculateSIP(input: CalculationInput): CalculationResult {
   const finalValue = sipFV(n);
   const estimatedReturns = finalValue - totalInvested;
 
-  // Year-by-year breakdown
   const yearlyBreakdown: YearlyBreakdown[] = [];
   for (let year = 1; year <= periodYears; year++) {
     const months = year * 12;
     const invested = amount * months;
     const value = sipFV(months);
-    // growthPercent = portfolio growth THIS year only
-    const prevPortfolioValue = year === 1 ? sipFV(12) - (sipFV(12) - amount * 12) : yearlyBreakdown[year - 2].value;
-    // Simpler: compare value vs last year's value (or invested in year 1)
     const prevValue = year === 1 ? amount * 12 : yearlyBreakdown[year - 2].value;
     yearlyBreakdown.push({
       year,
@@ -86,9 +82,6 @@ export function calculateSIP(input: CalculationInput): CalculationResult {
 /**
  * Lump Sum Formula — Groww-compatible
  *   FV = P × (1 + r)^n   (annual compounding)
- *
- * Proof match (₹1,00,000, 13%, 10yr):
- *   FV = 1,00,000 × (1.13)^10 ≈ ₹3,39,457  ✅ matches Groww
  */
 export function calculateLumpSum(input: CalculationInput): CalculationResult {
   const { amount, periodYears, expectedReturn } = input;
@@ -97,7 +90,6 @@ export function calculateLumpSum(input: CalculationInput): CalculationResult {
   const finalValue = amount * Math.pow(1 + r, periodYears);
   const estimatedReturns = finalValue - totalInvested;
 
-  // Year-by-year breakdown
   const yearlyBreakdown: YearlyBreakdown[] = [];
   for (let year = 1; year <= periodYears; year++) {
     const value = amount * Math.pow(1 + r, year);
@@ -116,13 +108,89 @@ export function calculateLumpSum(input: CalculationInput): CalculationResult {
     estimatedReturns: Math.round(estimatedReturns),
     finalValue: Math.round(finalValue),
     yearlyBreakdown,
-    cagr: expectedReturn,                                         // for lump sum CAGR = expected return
+    cagr: expectedReturn,
     wealthMultiplier: parseFloat((finalValue / totalInvested).toFixed(2)),
+  };
+}
+
+/**
+ * SWP Formula — Systematic Withdrawal Plan
+ *
+ * Monthly rate: r = (1 + annual_rate)^(1/12) - 1
+ *
+ * Each month:
+ *   1. Corpus grows: corpus = corpus × (1 + r)
+ *   2. Withdraw:     corpus = corpus − W
+ *
+ * Corpus after n months (closed form):
+ *   FV = PV × (1+r)^n − W × [((1+r)^n − 1) / r]
+ *
+ * Corpus depletes when FV ≤ 0.
+ * If W ≤ PV × r, corpus is self-sustaining (grows forever).
+ */
+export function calculateSWP(input: CalculationInput): CalculationResult {
+  const { amount, periodYears, expectedReturn, withdrawalAmount = 0 } = input;
+
+  const annualRate = expectedReturn / 100;
+  const r = Math.pow(1 + annualRate, 1 / 12) - 1;
+
+  // Simulate month-by-month for accuracy
+  let corpus = amount;
+  let totalWithdrawn = 0;
+  let corpusDepletesAtYear: number | null = null;
+
+  const yearlyBreakdown: YearlyBreakdown[] = [];
+
+  for (let year = 1; year <= periodYears; year++) {
+    for (let month = 1; month <= 12; month++) {
+      if (corpus <= 0) break;
+      corpus = corpus * (1 + r);               // grow
+      const withdrawal = Math.min(withdrawalAmount, corpus);
+      corpus -= withdrawal;
+      totalWithdrawn += withdrawal;
+    }
+
+    if (corpus <= 0 && corpusDepletesAtYear === null) {
+      corpusDepletesAtYear = year;
+      corpus = 0;
+    }
+
+    const prevValue = year === 1 ? amount : Math.max(0, yearlyBreakdown[year - 2].value);
+    const currentValue = Math.max(0, corpus);
+
+    yearlyBreakdown.push({
+      year,
+      invested: Math.round(amount),        // initial corpus (constant reference)
+      value: Math.round(currentValue),     // corpus remaining
+      returns: Math.round(totalWithdrawn), // cumulative withdrawn
+      growthPercent: prevValue > 0
+        ? parseFloat(((currentValue - prevValue) / prevValue * 100).toFixed(2))
+        : -100,
+    });
+  }
+
+  const finalValue = Math.max(0, corpus);
+  // Total interest earned = what you got out (withdrawn + remaining) minus what you put in
+  const estimatedReturns = finalValue + totalWithdrawn - amount;
+
+  return {
+    totalInvested: Math.round(amount),
+    estimatedReturns: Math.round(estimatedReturns),
+    finalValue: Math.round(finalValue),
+    yearlyBreakdown,
+    cagr: parseFloat(expectedReturn.toFixed(2)),
+    wealthMultiplier: amount > 0
+      ? parseFloat(((finalValue + totalWithdrawn) / amount).toFixed(2))
+      : 0,
+    totalWithdrawn: Math.round(totalWithdrawn),
+    remainingCorpus: Math.round(finalValue),
+    corpusDepletesAtYear,
   };
 }
 
 export function calculate(input: CalculationInput): CalculationResult {
   if (input.investmentType === 'SIP') return calculateSIP(input);
+  if (input.investmentType === 'SWP') return calculateSWP(input);
   return calculateLumpSum(input);
 }
 

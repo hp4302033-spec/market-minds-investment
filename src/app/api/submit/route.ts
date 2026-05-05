@@ -7,9 +7,9 @@ import { sendPlanEmail } from '@/lib/email';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, phone, investmentType, amount, periodYears, expectedReturn } = body;
+    const { name, email, phone, investmentType, amount, periodYears, expectedReturn, withdrawalAmount } = body;
 
-    // ── Agent 2: Strict Validation ──────────────────────────────────────
+    // ── Validation ────────────────────────────────────────────────────────
     const errors: Record<string, string> = {};
 
     if (!name || name.trim().length < 2) {
@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
       errors.phone = 'Please enter a valid 10-digit Indian mobile number';
     }
 
-    if (!['SIP', 'LUMPSUM'].includes(investmentType)) {
-      errors.investmentType = 'Please select SIP or Lump Sum';
+    if (!['SIP', 'LUMPSUM', 'SWP'].includes(investmentType)) {
+      errors.investmentType = 'Please select SIP, Lump Sum, or SWP';
     }
 
     const amt = parseFloat(amount);
@@ -47,25 +47,35 @@ export async function POST(request: NextRequest) {
       errors.expectedReturn = 'Expected return must be between 1% and 50%';
     }
 
+    const withdrawal = parseFloat(withdrawalAmount) || 0;
+    if (investmentType === 'SWP') {
+      if (!withdrawalAmount || withdrawal < 500) {
+        errors.withdrawalAmount = 'Minimum monthly withdrawal is ₹500';
+      } else if (withdrawal > amt) {
+        errors.withdrawalAmount = 'Monthly withdrawal cannot exceed initial corpus';
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ success: false, errors }, { status: 400 });
     }
 
-    // ── Agent 3: Calculate ───────────────────────────────────────────────
+    // ── Calculate ─────────────────────────────────────────────────────────
     const results = calculate({
       investmentType,
       amount: amt,
       periodYears: years,
       expectedReturn: ret,
+      ...(investmentType === 'SWP' && { withdrawalAmount: withdrawal }),
     });
 
-    // ── Agent 4: Generate Advice ─────────────────────────────────────────
+    // ── Generate Advice ───────────────────────────────────────────────────
     const advisorNote = generateAdvice(
-      { name: name.trim(), investmentType, amount: amt, periodYears: years, expectedReturn: ret },
+      { name: name.trim(), investmentType, amount: amt, periodYears: years, expectedReturn: ret, withdrawalAmount: withdrawal },
       results
     );
 
-    // ── Agent 6: Save to Database ────────────────────────────────────────
+    // ── Save to Database ──────────────────────────────────────────────────
     const leadData = {
       name: name.trim(),
       email: email.trim().toLowerCase(),
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const savedLead = await saveLead(leadData);
 
-    // ── Agent 6: Send Email ──────────────────────────────────────────────
+    // ── Send Email ────────────────────────────────────────────────────────
     const emailResult = await sendPlanEmail({
       to: email.trim().toLowerCase(),
       name: name.trim(),

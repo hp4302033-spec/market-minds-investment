@@ -9,10 +9,11 @@ interface FormData {
   name: string;
   email: string;
   phone: string;
-  investmentType: 'SIP' | 'LUMPSUM';
+  investmentType: 'SIP' | 'LUMPSUM' | 'SWP';
   amount: string;
   periodYears: string;
   expectedReturn: string;
+  withdrawalAmount: string; // SWP only
 }
 
 interface FormErrors {
@@ -22,6 +23,7 @@ interface FormErrors {
   amount?: string;
   periodYears?: string;
   expectedReturn?: string;
+  withdrawalAmount?: string;
 }
 
 interface InputFormProps {
@@ -32,7 +34,6 @@ interface InputFormProps {
 const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 const phoneRegex = /^[6-9]\d{9}$/;
 
-/* ── Reusable animated field wrapper ── */
 const formFieldVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
   visible: (i: number) => ({
@@ -42,15 +43,18 @@ const formFieldVariants: Variants = {
   }),
 };
 
+const INVESTMENT_TYPES = [
+  { key: 'SIP',     label: 'SIP',      sub: '— Monthly',   desc: 'Invest a fixed amount every month — great for building wealth gradually.' },
+  { key: 'LUMPSUM', label: 'Lump Sum', sub: '— One-time',  desc: 'Invest a large amount at once — ideal when you have a lump sum available.' },
+  { key: 'SWP',     label: 'SWP',      sub: '— Withdraw',  desc: 'Withdraw a fixed amount monthly from your corpus — ideal for steady retirement income.' },
+] as const;
+
 export default function InputForm({ onSubmit, loading }: InputFormProps) {
   const [form, setForm] = useState<FormData>({
-    name: '',
-    email: '',
-    phone: '',
+    name: '', email: '', phone: '',
     investmentType: 'SIP',
-    amount: '',
-    periodYears: '',
-    expectedReturn: '',
+    amount: '', periodYears: '', expectedReturn: '',
+    withdrawalAmount: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -61,12 +65,29 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
     if (!data.email.trim() || !emailRegex.test(data.email.trim())) e.email = 'Enter a valid email address';
     const phone = data.phone.replace(/\s/g, '');
     if (!phone || !phoneRegex.test(phone)) e.phone = 'Enter a valid 10-digit Indian mobile number';
+
     const amt = parseFloat(data.amount);
-    if (!data.amount || isNaN(amt) || amt < 500) e.amount = data.investmentType === 'SIP' ? 'Minimum monthly SIP is ₹500' : 'Minimum investment is ₹500';
+    if (!data.amount || isNaN(amt) || amt < 500) {
+      e.amount = data.investmentType === 'SIP'
+        ? 'Minimum monthly SIP is ₹500'
+        : data.investmentType === 'SWP'
+        ? 'Minimum initial corpus is ₹500'
+        : 'Minimum investment is ₹500';
+    }
+
     const yr = parseInt(data.periodYears);
     if (!data.periodYears || isNaN(yr) || yr < 1 || yr > 40) e.periodYears = 'Period must be between 1 and 40 years';
     const ret = parseFloat(data.expectedReturn);
     if (!data.expectedReturn || isNaN(ret) || ret < 1 || ret > 50) e.expectedReturn = 'Expected return must be between 1% and 50%';
+
+    if (data.investmentType === 'SWP') {
+      const w = parseFloat(data.withdrawalAmount);
+      if (!data.withdrawalAmount || isNaN(w) || w < 500) {
+        e.withdrawalAmount = 'Minimum monthly withdrawal is ₹500';
+      } else if (!isNaN(amt) && w > amt) {
+        e.withdrawalAmount = 'Monthly withdrawal cannot exceed initial corpus';
+      }
+    }
     return e;
   }, []);
 
@@ -76,12 +97,11 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
     if (touched[field]) setErrors(validate(updated));
   };
 
-  const handleTypeSwitch = (type: 'SIP' | 'LUMPSUM') => {
-    const updated = { ...form, investmentType: type, amount: '' };
+  const handleTypeSwitch = (type: 'SIP' | 'LUMPSUM' | 'SWP') => {
+    const updated = { ...form, investmentType: type, amount: '', withdrawalAmount: '' };
     setForm(updated);
-    // Clear amount touched so validation error doesn't flash immediately
-    setTouched(prev => ({ ...prev, amount: false }));
-    setErrors(prev => ({ ...prev, amount: undefined }));
+    setTouched(prev => ({ ...prev, amount: false, withdrawalAmount: false }));
+    setErrors(prev => ({ ...prev, amount: undefined, withdrawalAmount: undefined }));
   };
 
   const handleBlur = (field: keyof FormData) => {
@@ -97,6 +117,10 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
     handleChange('amount', e.target.value.replace(/[^0-9.]/g, ''));
   };
 
+  const handleWithdrawalInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleChange('withdrawalAmount', e.target.value.replace(/[^0-9.]/g, ''));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const allTouched: Record<string, boolean> = {};
@@ -110,6 +134,7 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
   const isEmailValid = form.email && emailRegex.test(form.email.trim());
   const isPhoneValid = form.phone && phoneRegex.test(form.phone.replace(/\s/g, ''));
   const canSubmit = Object.keys(validate(form)).length === 0;
+  const isSWP = form.investmentType === 'SWP';
 
   const FieldError = ({ field }: { field: keyof FormErrors }) => (
     <AnimatePresence>
@@ -172,7 +197,7 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
         <h2 className="text-2xl font-bold text-text-primary mb-1">Plan Your Financial Future</h2>
         <p className="text-text-secondary text-sm">
           Enter your details to generate a personalized investment report.{' '}
-          <span className="text-brand-green font-medium">Email & phone are required</span> for report delivery.
+          <span className="text-brand-green font-medium">Email &amp; phone are required</span> for report delivery.
         </p>
       </motion.div>
 
@@ -181,26 +206,22 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
         <div className="mb-6">
           <p className="text-xs font-semibold text-text-muted tracking-widest uppercase mb-4">Personal Information</p>
 
-          {/* Name */}
           <motion.div className="mb-4" custom={0} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
             <label className="form-label" htmlFor="name">Full Name *</label>
             <motion.input
-              id="name"
-              type="text"
+              id="name" type="text"
               className={`input-field ${touched.name && errors.name ? 'error' : touched.name && !errors.name ? 'success' : ''}`}
               placeholder="e.g. Rahul Sharma"
               value={form.name}
               onChange={e => handleChange('name', e.target.value)}
               onBlur={() => handleBlur('name')}
               autoComplete="name"
-              whileFocus={{ scale: 1.005 }}
-              transition={{ duration: 0.15 }}
+              whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
             />
             <FieldError field="name" />
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Email */}
             <motion.div custom={1} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <label className="form-label" htmlFor="email">
                 Email Address *{' '}
@@ -208,23 +229,20 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
               </label>
               <div className="relative">
                 <motion.input
-                  id="email"
-                  type="email"
+                  id="email" type="email"
                   className={`input-field pr-10 ${touched.email && errors.email ? 'error' : isEmailValid ? 'success' : ''}`}
                   placeholder="you@example.com"
                   value={form.email}
                   onChange={e => handleChange('email', e.target.value)}
                   onBlur={() => handleBlur('email')}
                   autoComplete="email"
-                  whileFocus={{ scale: 1.005 }}
-                  transition={{ duration: 0.15 }}
+                  whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
                 />
                 <FieldSuccess show={!!isEmailValid} />
               </div>
               <FieldError field="email" />
             </motion.div>
 
-            {/* Phone */}
             <motion.div custom={2} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <label className="form-label" htmlFor="phone">
                 Mobile Number *{' '}
@@ -232,29 +250,20 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
               </label>
               <div className="relative">
                 <motion.input
-                  id="phone"
-                  type="tel"
+                  id="phone" type="tel"
                   className={`input-field pr-10 ${touched.phone && errors.phone ? 'error' : isPhoneValid ? 'success' : ''}`}
                   placeholder="9876543210"
                   value={form.phone}
                   onChange={handlePhoneInput}
                   onBlur={() => handleBlur('phone')}
-                  maxLength={10}
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  whileFocus={{ scale: 1.005 }}
-                  transition={{ duration: 0.15 }}
+                  maxLength={10} inputMode="numeric" autoComplete="tel"
+                  whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
                 />
                 <FieldSuccess show={!!isPhoneValid} />
               </div>
               <FieldError field="phone" />
               {form.phone && (
-                <motion.p
-                  className="text-xs text-text-muted mt-1"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                >
+                <motion.p className="text-xs text-text-muted mt-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
                   {form.phone.length}/10 digits
                 </motion.p>
               )}
@@ -266,25 +275,24 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
         <div className="mb-6">
           <p className="text-xs font-semibold text-text-muted tracking-widest uppercase mb-4">Investment Details</p>
 
-          {/* Investment Type Toggle */}
+          {/* Investment Type Toggle — 3 options */}
           <motion.div className="mb-4" custom={3} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
             <label className="form-label">Investment Type *</label>
-            <div className="toggle-group">
-              {(['SIP', 'LUMPSUM'] as const).map(type => (
+            <div className="toggle-group" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+              {INVESTMENT_TYPES.map(({ key, label, sub }) => (
                 <motion.button
-                  key={type}
+                  key={key}
                   type="button"
-                  className={`toggle-option ${form.investmentType === type ? 'active' : ''}`}
-                  onClick={() => handleTypeSwitch(type)}
+                  className={`toggle-option ${form.investmentType === key ? 'active' : ''}`}
+                  onClick={() => handleTypeSwitch(key)}
                   whileHover={{ opacity: 0.85 }}
                   whileTap={{ scale: 0.97 }}
                   transition={{ duration: 0.15 }}
                 >
-                  {type === 'SIP' ? (
-                    <span><span className="font-semibold">SIP</span><span className="hidden sm:inline text-xs opacity-75 ml-1">— Monthly</span></span>
-                  ) : (
-                    <span><span className="font-semibold">Lump Sum</span><span className="hidden sm:inline text-xs opacity-75 ml-1">— One-time</span></span>
-                  )}
+                  <span>
+                    <span className="font-semibold">{label}</span>
+                    <span className="hidden sm:inline text-xs opacity-75 ml-1">{sub}</span>
+                  </span>
                 </motion.button>
               ))}
             </div>
@@ -292,67 +300,91 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
               <motion.p
                 key={form.investmentType}
                 className="text-xs text-text-muted mt-2"
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 8 }}
+                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
                 transition={{ duration: 0.2 }}
               >
-                {form.investmentType === 'SIP'
-                  ? 'Invest a fixed amount every month — great for building wealth gradually.'
-                  : 'Invest a large amount at once — ideal when you have a lump sum available.'}
+                {INVESTMENT_TYPES.find(t => t.key === form.investmentType)?.desc}
               </motion.p>
             </AnimatePresence>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid gap-4 ${isSWP ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
             {/* Amount */}
             <motion.div custom={4} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <label className="form-label" htmlFor="amount">
                 <AnimatePresence mode="wait">
                   <motion.span
                     key={form.investmentType}
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 4 }}
+                    initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.18 }}
                   >
-                    {form.investmentType === 'SIP' ? 'Monthly SIP (₹)' : 'Investment Amount (₹)'} *
+                    {form.investmentType === 'SIP' ? 'Monthly SIP (₹)' : form.investmentType === 'SWP' ? 'Initial Corpus (₹)' : 'Investment Amount (₹)'} *
                   </motion.span>
                 </AnimatePresence>
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm font-medium">₹</span>
                 <motion.input
-                  id="amount"
-                  type="text"
-                  inputMode="numeric"
+                  id="amount" type="text" inputMode="numeric"
                   className={`input-field pl-7 ${touched.amount && errors.amount ? 'error' : touched.amount && !errors.amount ? 'success' : ''}`}
-                  placeholder={form.investmentType === 'SIP' ? '5,000' : '1,00,000'}
+                  placeholder={form.investmentType === 'SIP' ? '5,000' : '10,00,000'}
                   value={form.amount}
                   onChange={handleAmountInput}
                   onBlur={() => handleBlur('amount')}
-                  whileFocus={{ scale: 1.005 }}
-                  transition={{ duration: 0.15 }}
+                  whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
                 />
               </div>
               <FieldError field="amount" />
             </motion.div>
 
+            {/* SWP — Monthly Withdrawal */}
+            <AnimatePresence>
+              {isSWP && (
+                <motion.div
+                  custom={5}
+                  initial={{ opacity: 0, height: 0, overflow: 'hidden' }}
+                  animate={{ opacity: 1, height: 'auto', overflow: 'visible' }}
+                  exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
+                  transition={{ duration: 0.3, ease: EASE }}
+                >
+                  <label className="form-label" htmlFor="withdrawalAmount">
+                    Monthly Withdrawal (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm font-medium">₹</span>
+                    <motion.input
+                      id="withdrawalAmount" type="text" inputMode="numeric"
+                      className={`input-field pl-7 ${touched.withdrawalAmount && errors.withdrawalAmount ? 'error' : touched.withdrawalAmount && !errors.withdrawalAmount ? 'success' : ''}`}
+                      placeholder="25,000"
+                      value={form.withdrawalAmount}
+                      onChange={handleWithdrawalInput}
+                      onBlur={() => handleBlur('withdrawalAmount')}
+                      whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
+                    />
+                  </div>
+                  <FieldError field="withdrawalAmount" />
+                  {form.withdrawalAmount && form.amount && !errors.withdrawalAmount && (
+                    <motion.p className="text-xs text-text-muted mt-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                      Annual withdrawal: ₹{(parseFloat(form.withdrawalAmount) * 12).toLocaleString('en-IN')}
+                      {' '}({((parseFloat(form.withdrawalAmount) * 12 / parseFloat(form.amount)) * 100).toFixed(1)}% of corpus)
+                    </motion.p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Period */}
-            <motion.div custom={5} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+            <motion.div custom={isSWP ? 6 : 5} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
               <label className="form-label" htmlFor="period">Investment Period (Years) *</label>
               <div className="relative">
                 <motion.input
-                  id="period"
-                  type="number"
-                  min={1} max={40}
+                  id="period" type="number" min={1} max={40}
                   className={`input-field ${touched.periodYears && errors.periodYears ? 'error' : touched.periodYears && !errors.periodYears ? 'success' : ''}`}
                   placeholder="10"
                   value={form.periodYears}
                   onChange={e => handleChange('periodYears', e.target.value)}
                   onBlur={() => handleBlur('periodYears')}
-                  whileFocus={{ scale: 1.005 }}
-                  transition={{ duration: 0.15 }}
+                  whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">yrs</span>
               </div>
@@ -360,44 +392,58 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
             </motion.div>
 
             {/* Expected Return */}
-            <motion.div custom={6} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-              <label className="form-label" htmlFor="return">Expected Return (% p.a.) *</label>
-              <div className="relative">
+            {!isSWP && (
+              <motion.div custom={6} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
+                <label className="form-label" htmlFor="return">Expected Return (% p.a.) *</label>
+                <div className="relative">
+                  <motion.input
+                    id="return" type="number" step={0.5} min={1} max={50}
+                    className={`input-field pr-8 ${touched.expectedReturn && errors.expectedReturn ? 'error' : touched.expectedReturn && !errors.expectedReturn ? 'success' : ''}`}
+                    placeholder="12"
+                    value={form.expectedReturn}
+                    onChange={e => handleChange('expectedReturn', e.target.value)}
+                    onBlur={() => handleBlur('expectedReturn')}
+                    whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">%</span>
+                </div>
+                <FieldError field="expectedReturn" />
+                <AnimatePresence>
+                  {form.expectedReturn && !errors.expectedReturn && (
+                    <motion.p className="text-xs text-text-muted mt-1" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                      Risk:{' '}
+                      <span className={parseFloat(form.expectedReturn) <= 8 ? 'text-blue-400' : parseFloat(form.expectedReturn) <= 14 ? 'text-yellow-400' : 'text-red-400'}>
+                        {parseFloat(form.expectedReturn) <= 8 ? 'Low' : parseFloat(form.expectedReturn) <= 14 ? 'Moderate' : 'High'}
+                      </span>
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Expected Return for SWP — full width row */}
+          {isSWP && (
+            <motion.div
+              className="mt-4"
+              custom={7} variants={formFieldVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}
+            >
+              <label className="form-label" htmlFor="return-swp">Expected Return (% p.a.) *</label>
+              <div className="relative max-w-xs">
                 <motion.input
-                  id="return"
-                  type="number"
-                  step={0.5} min={1} max={50}
+                  id="return-swp" type="number" step={0.5} min={1} max={50}
                   className={`input-field pr-8 ${touched.expectedReturn && errors.expectedReturn ? 'error' : touched.expectedReturn && !errors.expectedReturn ? 'success' : ''}`}
-                  placeholder="12"
+                  placeholder="10"
                   value={form.expectedReturn}
                   onChange={e => handleChange('expectedReturn', e.target.value)}
                   onBlur={() => handleBlur('expectedReturn')}
-                  whileFocus={{ scale: 1.005 }}
-                  transition={{ duration: 0.15 }}
+                  whileFocus={{ scale: 1.005 }} transition={{ duration: 0.15 }}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">%</span>
               </div>
               <FieldError field="expectedReturn" />
-              <AnimatePresence>
-                {form.expectedReturn && !errors.expectedReturn && (
-                  <motion.p
-                    className="text-xs text-text-muted mt-1"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                  >
-                    Risk:{' '}
-                    <span className={
-                      parseFloat(form.expectedReturn) <= 8 ? 'text-blue-400' :
-                      parseFloat(form.expectedReturn) <= 14 ? 'text-yellow-400' : 'text-red-400'
-                    }>
-                      {parseFloat(form.expectedReturn) <= 8 ? 'Low' : parseFloat(form.expectedReturn) <= 14 ? 'Moderate' : 'High'}
-                    </span>
-                  </motion.p>
-                )}
-              </AnimatePresence>
             </motion.div>
-          </div>
+          )}
         </div>
 
         {/* Gate message */}
@@ -451,9 +497,7 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
 
         <motion.p
           className="text-xs text-text-muted text-center mt-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
         >
           Your data is secure and will never be shared with third parties.
         </motion.p>

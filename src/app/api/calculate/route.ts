@@ -4,10 +4,10 @@ import { calculate, CalculationInput } from '@/lib/calculator';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { investmentType, amount, periodYears, expectedReturn } = body;
+    const { investmentType, amount, periodYears, expectedReturn, withdrawalAmount } = body;
 
     // Validation
-    if (!['SIP', 'LUMPSUM'].includes(investmentType)) {
+    if (!['SIP', 'LUMPSUM', 'SWP'].includes(investmentType)) {
       return NextResponse.json({ error: 'Invalid investment type' }, { status: 400 });
     }
     if (!amount || amount <= 0 || amount > 100000000) {
@@ -19,12 +19,21 @@ export async function POST(request: NextRequest) {
     if (!expectedReturn || expectedReturn < 1 || expectedReturn > 50) {
       return NextResponse.json({ error: 'Expected return must be between 1% and 50%' }, { status: 400 });
     }
+    if (investmentType === 'SWP') {
+      if (!withdrawalAmount || withdrawalAmount < 500) {
+        return NextResponse.json({ error: 'Minimum monthly withdrawal is ₹500' }, { status: 400 });
+      }
+      if (withdrawalAmount > amount) {
+        return NextResponse.json({ error: 'Monthly withdrawal cannot exceed initial corpus' }, { status: 400 });
+      }
+    }
 
     const input: CalculationInput = {
       investmentType,
       amount: parseFloat(amount),
       periodYears: parseInt(periodYears),
       expectedReturn: parseFloat(expectedReturn),
+      ...(investmentType === 'SWP' && { withdrawalAmount: parseFloat(withdrawalAmount) }),
     };
 
     const results = calculate(input);

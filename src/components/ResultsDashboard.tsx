@@ -16,6 +16,7 @@ interface ResultsData {
   amount: number;
   periodYears: number;
   expectedReturn: number;
+  withdrawalAmount?: number;
   results: CalculationResult;
   advisorNote: string;
   emailSent: boolean;
@@ -173,20 +174,26 @@ function AdvisorSection({ note }: { note: string }) {
 
 /* ── Main Dashboard ────────────────────────────── */
 export default function ResultsDashboard({ data, onReset }: ResultsDashboardProps) {
-  const { results, advisorNote, emailSent, emailMessage, name, email, phone, investmentType, amount, periodYears, expectedReturn } = data;
+  const { results, advisorNote, emailSent, emailMessage, name, email, phone, investmentType, amount, periodYears, expectedReturn, withdrawalAmount = 0 } = data;
+  const isSWP = investmentType === 'SWP';
   const [downloading, setDownloading] = useState<'pdf' | 'ppt' | null>(null);
   const [showTable, setShowTable] = useState(false);
 
-  const pieData = [
-    { name: 'Invested', value: results.totalInvested },
-    { name: 'Returns', value: results.estimatedReturns },
-  ];
+  const pieData = isSWP
+    ? [
+        { name: 'Remaining', value: results.remainingCorpus ?? results.finalValue },
+        { name: 'Withdrawn', value: results.totalWithdrawn ?? 0 },
+      ]
+    : [
+        { name: 'Invested', value: results.totalInvested },
+        { name: 'Returns', value: results.estimatedReturns },
+      ];
 
   const handleDownloadPDF = async () => {
     setDownloading('pdf');
     try {
       const { generateAndDownloadPDF } = await import('@/lib/generatePDF');
-      await generateAndDownloadPDF({ name, email, phone, investmentType, amount, periodYears, expectedReturn, results, advisorNote });
+      await generateAndDownloadPDF({ name, email, phone, investmentType, amount, periodYears, expectedReturn, withdrawalAmount, results, advisorNote });
     } catch (err) {
       console.error('PDF error:', err);
       alert('PDF generation failed. Please try again.');
@@ -231,7 +238,8 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
           </div>
           <h2 className="text-2xl font-bold text-text-primary">Your Financial Dashboard</h2>
           <p className="text-text-secondary text-sm mt-1">
-            Hi {name.split(' ')[0]}! Here's your personalized {investmentType === 'SIP' ? 'SIP' : 'Lump Sum'} investment plan.
+            Hi {name.split(' ')[0]}! Here&apos;s your personalized{' '}
+            {investmentType === 'SIP' ? 'SIP' : investmentType === 'SWP' ? 'SWP' : 'Lump Sum'} plan.
           </p>
         </div>
         <motion.button
@@ -277,29 +285,83 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
 
       {/* Key Metrics */}
       <motion.div className="grid grid-cols-1 sm:grid-cols-3 gap-4" variants={containerVariants}>
-        <StatCard
-          label="Total Invested"
-          value={formatCurrency(results.totalInvested)}
-          sub={investmentType === 'SIP' ? `₹${amount.toLocaleString('en-IN')}/month × ${periodYears * 12} months` : 'One-time investment'}
-        />
-        <StatCard
-          label="Estimated Returns"
-          value={`+${formatCurrency(results.estimatedReturns)}`}
-          sub={`${Math.round((results.estimatedReturns / results.totalInvested) * 100)}% profit on invested amount`}
-        />
-        <StatCard
-          label="Final Corpus Value"
-          value={formatCurrency(results.finalValue)}
-          sub={`${results.wealthMultiplier}x wealth multiplier | ${results.cagr}% CAGR`}
-          accent
-        />
+        {isSWP ? (
+          <>
+            <StatCard
+              label="Initial Corpus"
+              value={formatCurrency(results.totalInvested)}
+              sub="One-time corpus invested"
+            />
+            <StatCard
+              label="Total Withdrawn"
+              value={formatCurrency(results.totalWithdrawn ?? 0)}
+              sub={`₹${withdrawalAmount.toLocaleString('en-IN')}/month × ${periodYears * 12} months`}
+            />
+            <StatCard
+              label={results.corpusDepletesAtYear ? `Depleted at Year ${results.corpusDepletesAtYear}` : 'Remaining Corpus'}
+              value={results.corpusDepletesAtYear ? '₹0' : formatCurrency(results.remainingCorpus ?? 0)}
+              sub={results.corpusDepletesAtYear ? '⚠️ Corpus exhausted before period ends' : `${results.wealthMultiplier}x total value ratio | ${results.cagr}% p.a.`}
+              accent
+            />
+          </>
+        ) : (
+          <>
+            <StatCard
+              label="Total Invested"
+              value={formatCurrency(results.totalInvested)}
+              sub={investmentType === 'SIP' ? `₹${amount.toLocaleString('en-IN')}/month × ${periodYears * 12} months` : 'One-time investment'}
+            />
+            <StatCard
+              label="Estimated Returns"
+              value={`+${formatCurrency(results.estimatedReturns)}`}
+              sub={`${Math.round((results.estimatedReturns / results.totalInvested) * 100)}% profit on invested amount`}
+            />
+            <StatCard
+              label="Final Corpus Value"
+              value={formatCurrency(results.finalValue)}
+              sub={`${results.wealthMultiplier}x wealth multiplier | ${results.cagr}% CAGR`}
+              accent
+            />
+          </>
+        )}
       </motion.div>
+
+      {/* SWP depletion warning */}
+      {isSWP && results.corpusDepletesAtYear && (
+        <motion.div
+          variants={itemVariants}
+          className="flex items-start gap-3 p-4 rounded-xl text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:1}}>
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <p className="text-red-400">
+            <span className="font-semibold">Corpus depletes at Year {results.corpusDepletesAtYear}.</span>{' '}
+            Reduce monthly withdrawal or increase initial corpus to make your plan sustainable.
+          </p>
+        </motion.div>
+      )}
+      {isSWP && !results.corpusDepletesAtYear && (
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center gap-3 p-4 rounded-xl text-sm"
+          style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <p className="text-brand-green font-medium">Self-sustaining SWP — corpus survives the full {periodYears}-year period! 🎉</p>
+        </motion.div>
+      )}
 
       {/* Charts */}
       <motion.div className="grid grid-cols-1 lg:grid-cols-3 gap-4" variants={containerVariants}>
         {/* Area Chart */}
         <motion.div className="lg:col-span-2 glass-card rounded-2xl p-6" variants={itemVariants} {...cardHover}>
-          <h3 className="font-semibold text-text-primary mb-4">Corpus Growth Over Time</h3>
+          <h3 className="font-semibold text-text-primary mb-4">
+            {isSWP ? 'Corpus Depletion Over Time' : 'Corpus Growth Over Time'}
+          </h3>
           <div style={{ height: 250 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={results.yearlyBreakdown} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
@@ -317,8 +379,17 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
                 <XAxis dataKey="year" tick={{ fill: '#64748B', fontSize: 11 }} tickLine={false} axisLine={false} />
                 <YAxis tickFormatter={v => formatCurrency(v)} tick={{ fill: '#64748B', fontSize: 10 }} tickLine={false} axisLine={false} width={75} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="invested" stroke={CHART_COLORS.invested} fill="url(#investedGrad)" strokeWidth={2} name="Invested" />
-                <Area type="monotone" dataKey="value" stroke={CHART_COLORS.returns} fill="url(#returnsGrad)" strokeWidth={2.5} name="Portfolio Value" />
+                {isSWP ? (
+                  <>
+                    <Area type="monotone" dataKey="value" stroke={CHART_COLORS.returns} fill="url(#returnsGrad)" strokeWidth={2.5} name="Corpus Remaining" />
+                    <Area type="monotone" dataKey="returns" stroke={CHART_COLORS.invested} fill="url(#investedGrad)" strokeWidth={2} name="Cumulative Withdrawn" />
+                  </>
+                ) : (
+                  <>
+                    <Area type="monotone" dataKey="invested" stroke={CHART_COLORS.invested} fill="url(#investedGrad)" strokeWidth={2} name="Invested" />
+                    <Area type="monotone" dataKey="value" stroke={CHART_COLORS.returns} fill="url(#returnsGrad)" strokeWidth={2.5} name="Portfolio Value" />
+                  </>
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -326,13 +397,15 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
 
         {/* Pie Chart */}
         <motion.div className="glass-card rounded-2xl p-6" variants={itemVariants} {...cardHover}>
-          <h3 className="font-semibold text-text-primary mb-4">Invested vs Returns</h3>
+          <h3 className="font-semibold text-text-primary mb-4">
+            {isSWP ? 'Remaining vs Withdrawn' : 'Invested vs Returns'}
+          </h3>
           <div style={{ height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                  <Cell fill={CHART_COLORS.invested} />
                   <Cell fill={CHART_COLORS.returns} />
+                  <Cell fill={CHART_COLORS.invested} />
                 </Pie>
                 <Tooltip formatter={(v) => typeof v === 'number' ? formatCurrency(v) : String(v)} contentStyle={{ background: '#0F172A', border: '1px solid rgba(248,250,252,0.15)', borderRadius: 8 }} />
                 <Legend iconType="circle" iconSize={10} formatter={(v) => <span style={{ color: '#CBD5E1', fontSize: 12 }}>{v}</span>} />
@@ -340,14 +413,33 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
             </ResponsiveContainer>
           </div>
           <div className="mt-2 space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-text-muted">Invested</span>
-              <span className="font-medium" style={{ color: CHART_COLORS.invested }}>{Math.round((results.totalInvested / results.finalValue) * 100)}%</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-text-muted">Returns</span>
-              <span className="font-medium" style={{ color: CHART_COLORS.returns }}>{Math.round((results.estimatedReturns / results.finalValue) * 100)}%</span>
-            </div>
+            {isSWP ? (
+              <>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Remaining</span>
+                  <span className="font-medium" style={{ color: CHART_COLORS.returns }}>
+                    {results.totalInvested > 0 ? Math.round(((results.remainingCorpus ?? 0) / results.totalInvested) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Withdrawn</span>
+                  <span className="font-medium" style={{ color: CHART_COLORS.invested }}>
+                    {results.totalInvested > 0 ? Math.round(((results.totalWithdrawn ?? 0) / results.totalInvested) * 100) : 0}%
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Invested</span>
+                  <span className="font-medium" style={{ color: CHART_COLORS.invested }}>{Math.round((results.totalInvested / results.finalValue) * 100)}%</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-text-muted">Returns</span>
+                  <span className="font-medium" style={{ color: CHART_COLORS.returns }}>{Math.round((results.estimatedReturns / results.finalValue) * 100)}%</span>
+                </div>
+              </>
+            )}
           </div>
         </motion.div>
       </motion.div>
@@ -386,31 +478,54 @@ export default function ResultsDashboard({ data, onReset }: ResultsDashboardProp
                 <thead>
                   <tr>
                     <th>Year</th>
-                    <th>Amount Invested</th>
-                    <th>Portfolio Value</th>
-                    <th>Total Returns</th>
+                    {isSWP ? (
+                      <><th>Corpus Value</th><th>Cum. Withdrawn</th><th>Withdrawn (Year)</th></>
+                    ) : (
+                      <><th>Amount Invested</th><th>Portfolio Value</th><th>Total Returns</th></>
+                    )}
                     <th>Annual Growth</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {results.yearlyBreakdown.map((row, i) => (
-                    <motion.tr
-                      key={row.year}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.02, duration: 0.25 }}
-                    >
-                      <td className="font-medium text-text-primary">Year {row.year}</td>
-                      <td>{formatCurrency(row.invested)}</td>
-                      <td className="font-medium" style={{ color: '#22C55E' }}>{formatCurrency(row.value)}</td>
-                      <td className="font-medium" style={{ color: '#4ADE80' }}>+{formatCurrency(row.returns)}</td>
-                      <td>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E' }}>
-                          {row.growthPercent}%
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
+                  {results.yearlyBreakdown.map((row, i) => {
+                    const prevReturns = i > 0 ? results.yearlyBreakdown[i - 1].returns : 0;
+                    const withdrawnThisYear = isSWP ? (row.returns - prevReturns) : 0;
+                    return (
+                      <motion.tr
+                        key={row.year}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.02, duration: 0.25 }}
+                      >
+                        <td className="font-medium text-text-primary">Year {row.year}</td>
+                        {isSWP ? (
+                          <>
+                            <td className="font-medium" style={{ color: row.value === 0 ? '#EF4444' : '#22C55E' }}>
+                              {row.value === 0 ? 'Depleted' : formatCurrency(row.value)}
+                            </td>
+                            <td className="font-medium" style={{ color: '#60A5FA' }}>-{formatCurrency(row.returns)}</td>
+                            <td style={{ color: '#94A3B8' }}>-{formatCurrency(withdrawnThisYear)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td>{formatCurrency(row.invested)}</td>
+                            <td className="font-medium" style={{ color: '#22C55E' }}>{formatCurrency(row.value)}</td>
+                            <td className="font-medium" style={{ color: '#4ADE80' }}>+{formatCurrency(row.returns)}</td>
+                          </>
+                        )}
+                        <td>
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                            style={{
+                              background: row.growthPercent >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                              color: row.growthPercent >= 0 ? '#22C55E' : '#EF4444',
+                            }}
+                          >
+                            {row.growthPercent >= 0 ? '+' : ''}{row.growthPercent}%
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </motion.div>
