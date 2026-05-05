@@ -76,6 +76,14 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
     if (touched[field]) setErrors(validate(updated));
   };
 
+  const handleTypeSwitch = (type: 'SIP' | 'LUMPSUM') => {
+    const updated = { ...form, investmentType: type, amount: '' };
+    setForm(updated);
+    // Clear amount touched so validation error doesn't flash immediately
+    setTouched(prev => ({ ...prev, amount: false }));
+    setErrors(prev => ({ ...prev, amount: undefined }));
+  };
+
   const handleBlur = (field: keyof FormData) => {
     setTouched(prev => ({ ...prev, [field]: true }));
     setErrors(validate(form));
@@ -267,7 +275,7 @@ export default function InputForm({ onSubmit, loading }: InputFormProps) {
                   key={type}
                   type="button"
                   className={`toggle-option ${form.investmentType === type ? 'active' : ''}`}
-                  onClick={() => { handleChange('investmentType', type); handleChange('amount', ''); }}
+                  onClick={() => handleTypeSwitch(type)}
                   whileHover={{ opacity: 0.85 }}
                   whileTap={{ scale: 0.97 }}
                   transition={{ duration: 0.15 }}
