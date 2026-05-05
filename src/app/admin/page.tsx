@@ -24,6 +24,7 @@ interface Stats {
   totalAUM: number;
   sipCount: number;
   lumpSumCount: number;
+  swpCount: number;
 }
 
 function formatCurrency(n: number) {
@@ -176,7 +177,7 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <div className="stat-card rounded-xl">
               <p className="text-xs text-text-muted uppercase tracking-widest mb-2">Total Leads</p>
               <p className="text-2xl font-bold text-text-primary">{stats.total.toLocaleString('en-IN')}</p>
@@ -192,6 +193,10 @@ export default function AdminPage() {
             <div className="stat-card rounded-xl">
               <p className="text-xs text-text-muted uppercase tracking-widest mb-2">Lump Sum Clients</p>
               <p className="text-2xl font-bold text-yellow-400">{stats.lumpSumCount}</p>
+            </div>
+            <div className="stat-card rounded-xl" style={{ background: 'linear-gradient(135deg,rgba(168,85,247,0.1),rgba(168,85,247,0.03))', borderColor: 'rgba(168,85,247,0.2)' }}>
+              <p className="text-xs text-text-muted uppercase tracking-widest mb-2">SWP Clients</p>
+              <p className="text-2xl font-bold" style={{ color: '#C084FC' }}>{stats.swpCount}</p>
             </div>
           </div>
         )}
@@ -279,14 +284,24 @@ export default function AdminPage() {
                       </td>
                       <td>
                         <span className="text-xs font-semibold px-2 py-1 rounded-full"
-                          style={lead.investment_type === 'SIP'
-                            ? { background: 'rgba(59,130,246,0.12)', color: '#60A5FA' }
-                            : { background: 'rgba(251,191,36,0.12)', color: '#FBBF24' }
+                          style={
+                            lead.investment_type === 'SIP'
+                              ? { background: 'rgba(59,130,246,0.12)', color: '#60A5FA' }
+                              : lead.investment_type === 'SWP'
+                              ? { background: 'rgba(168,85,247,0.12)', color: '#C084FC' }
+                              : { background: 'rgba(251,191,36,0.12)', color: '#FBBF24' }
                           }>
                           {lead.investment_type}
                         </span>
                       </td>
-                      <td>{formatCurrency(lead.amount)}{lead.investment_type === 'SIP' ? '/mo' : ''}</td>
+                      <td>
+                        {lead.investment_type === 'SWP'
+                          ? <span>{formatCurrency(lead.amount)}<span className="text-text-muted text-xs ml-1">corpus</span></span>
+                          : lead.investment_type === 'SIP'
+                          ? <span>{formatCurrency(lead.amount)}<span className="text-text-muted text-xs ml-1">/mo</span></span>
+                          : formatCurrency(lead.amount)
+                        }
+                      </td>
                       <td>{lead.period_years} yrs</td>
                       <td>{lead.expected_return}%</td>
                       <td>{formatCurrency(lead.total_invested)}</td>

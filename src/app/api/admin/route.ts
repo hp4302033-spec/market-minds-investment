@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
         totalAUM,
         sipCount: leads.filter(l => l.investment_type === 'SIP').length,
         lumpSumCount: leads.filter(l => l.investment_type === 'LUMPSUM').length,
+        swpCount: leads.filter(l => l.investment_type === 'SWP').length,
       },
     });
   } catch (err) {
