@@ -49,56 +49,72 @@ async function fetchKycStatus(rapidApiKey: string, pan: string) {
 }
 
 /* ── Map RapidAPI response → our KYCResult shape ─────────────────*/
+// Actual API response shape:
+// {
+//   cams_kra:  { kyc_status, kyc_date, kyc_mode, ... },
+//   cvl_kra:   { kyc_status, kyc_date, kyc_mode, ... },
+//   karvy_kra: { kyc_status, ... },
+//   kfin_kra:  { kyc_status, ... },
+//   ndml_kra:  { kyc_status, ... },
+// }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRapidResponse(pan: string, raw: any) {
   const entityType = ENTITY_TYPES[pan[3]] || 'Individual (Person)';
 
-  // Response can be an array of registrar entries or a wrapper object
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items: any[] = Array.isArray(raw)
-    ? raw
-    : (raw?.data ?? raw?.result ?? raw?.kyc_details ?? []);
+  // Known registrar keys in the response
+  const REGISTRAR_KEYS: Record<string, string> = {
+    cams_kra:  'CAMS KRA',
+    cvl_kra:   'CVL KRA',
+    karvy_kra: 'Karvy KRA',
+    kfin_kra:  'KFIN KRA',
+    ndml_kra:  'NDML KRA',
+  };
 
-  // Build registrations list
-  const kycRegistrations = items.map((item) => ({
-    registrar:        item?.kra_name        ?? item?.registrar        ?? item?.agency   ?? '—',
-    status:           item?.kyc_status      ?? item?.status           ?? '—',
-    kycType:          item?.kyc_type        ?? item?.kycType          ?? undefined,
-    applicationStatus: item?.application_status ?? item?.applicationStatus ?? undefined,
-    mode:             item?.kyc_mode        ?? item?.mode             ?? undefined,
-  }));
+  // Status is "active/verified" if it contains these keywords
+  const isActive = (status: string) =>
+    /validated|registered|active|verified|valid/i.test(status) &&
+    !/not\s+(available|checked|registered)/i.test(status);
 
-  // Determine overall status from registrations
-  const anyRegistered = kycRegistrations.some((r) => /registered/i.test(r.status));
-  const anyPending    = kycRegistrations.some((r) => /pending|processing/i.test(r.status));
+  const isPending = (status: string) =>
+    /pending|processing|hold/i.test(status);
+
+  // Build registrations array from named keys
+  const kycRegistrations = Object.entries(REGISTRAR_KEYS)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter(([key]) => raw?.[key] !== undefined)
+    .map(([key, label]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r: any = raw[key];
+      return {
+        registrar:   label,
+        status:      r?.kyc_status        ?? '—',
+        kycDate:     r?.kyc_date          ?? null,
+        kycMode:     r?.kyc_mode          ?? null,
+        statusDate:  r?.status_date       ?? null,
+        modStatus:   r?.modification_status ?? null,
+        remarks:     r?.kyc_remarks       ?? null,
+      };
+    });
+
+  const anyVerified = kycRegistrations.some((r) => isActive(r.status));
+  const anyPending  = kycRegistrations.some((r) => isPending(r.status));
 
   let overallStatus: 'verified' | 'pending' | 'not_found';
-  if (anyRegistered)   overallStatus = 'verified';
+  if (anyVerified)    overallStatus = 'verified';
   else if (anyPending) overallStatus = 'pending';
-  else                 overallStatus = 'not_found';
+  else                overallStatus = 'not_found';
 
-  // Try to pick name from response
-  const name: string =
-    items[0]?.name          ??
-    items[0]?.pan_name      ??
-    items[0]?.holder_name   ??
-    '—';
-
-  const verifiedWith: string[] = anyRegistered
-    ? kycRegistrations
-        .filter((r) => /registered/i.test(r.status))
-        .map((r) => r.registrar)
-        .filter((r) => r !== '—')
-    : [];
+  const verifiedWith = kycRegistrations
+    .filter((r) => isActive(r.status))
+    .map((r) => `${r.registrar} (${r.status})`);
 
   const remarks: Record<typeof overallStatus, string> = {
     verified:
-      `PAN ${pan} is KYC verified across ${verifiedWith.length} registrar(s): ${verifiedWith.join(', ') || 'CAMS/Karvy/CVL/NDML'}. ` +
-      `You are eligible to invest in Mutual Funds and all SEBI-regulated instruments.`,
+      `PAN ${pan} is KYC verified. ` +
+      `Active registrars: ${verifiedWith.join(', ')}.`,
     pending:
       `PAN ${pan} KYC is currently in progress at one or more registrars. ` +
-      `This typically resolves within 2–5 business days. ` +
-      `Please ensure your PAN is linked with Aadhaar on the Income Tax portal (incometax.gov.in).`,
+      `This typically resolves within 2–5 business days.`,
     not_found:
       `PAN ${pan} is not KYC registered with any of the checked registrars (CAMS, Karvy, CVL, NDML, DOTEX). ` +
       `Please complete your KYC at your nearest mutual fund distributor or online at camsonline.com / karvymfs.com.`,
@@ -107,13 +123,13 @@ function mapRapidResponse(pan: string, raw: any) {
   return {
     status: overallStatus,
     pan,
-    name,
     entityType,
     verifiedWith,
     kycRegistrations,
     remark: remarks[overallStatus],
   };
 }
+
 
 export async function POST(request: NextRequest) {
   try {
