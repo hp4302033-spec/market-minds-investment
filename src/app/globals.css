@@ -1,12 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
-  --color-bg-primary: #020617;
-  --color-bg-secondary: #0F172A;
-  --color-bg-tertiary: #1E293B;
+  --font-sans: 'Exo', system-ui, sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
+  --color-bg-primary: #0F172A;
+  --color-bg-secondary: #1E293B;
+  --color-bg-tertiary: #334155;
   --color-brand-green: #22C55E;
   --color-brand-green-light: #4ADE80;
   --color-brand-green-dark: #16A34A;
@@ -36,9 +35,9 @@
 }
 
 :root {
-  --bg-primary: #020617;
-  --bg-secondary: #0F172A;
-  --bg-tertiary: #1E293B;
+  --bg-primary: #0F172A;
+  --bg-secondary: #1E293B;
+  --bg-tertiary: #334155;
   --brand-green: #22C55E;
   --brand-green-light: #4ADE80;
   --brand-green-dark: #16A34A;
@@ -60,7 +59,7 @@ html {
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: 'Exo', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -155,7 +154,7 @@ body {
   border-radius: 10px;
   padding: 12px 16px;
   color: var(--text-primary);
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'Exo', sans-serif;
   font-size: 15px;
   transition: all 0.2s ease;
   outline: none;
@@ -265,7 +264,7 @@ body {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'Exo', sans-serif;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -287,7 +286,7 @@ body {
   width: calc(100% - 48px);
   max-width: 1200px;
   z-index: 100;
-  background: rgba(2, 6, 23, 0.85);
+  background: rgba(15, 23, 42, 0.85);
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   backdrop-filter: blur(20px);
@@ -299,7 +298,7 @@ body {
   transition: all 0.3s ease;
 }
 .navbar.scrolled {
-  background: rgba(2, 6, 23, 0.95);
+  background: rgba(15, 23, 42, 0.95);
   border-color: var(--border-default);
 }
 

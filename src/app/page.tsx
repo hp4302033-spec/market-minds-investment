@@ -6,6 +6,8 @@ import Navbar from '@/components/Navbar';
 import InputForm from '@/components/InputForm';
 import ResultsDashboard from '@/components/ResultsDashboard';
 import KYCChecker from '@/components/KYCChecker';
+import Hero from '@/components/Hero';
+import FeaturesScroll from '@/components/FeaturesScroll';
 
 interface SubmitResponse {
   success: boolean;
@@ -74,73 +76,7 @@ function StatItem({ value, label, prefix = '', suffix = '', delay = 0 }: {
   );
 }
 
-/* ── Feature card ─────────────────────────────── */
-function FeatureCard({ icon, title, desc, index }: {
-  icon: React.ReactNode; title: string; desc: string; index: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: '-60px' });
 
-  return (
-    <motion.div
-      ref={ref}
-      className="glass-card glass-card-hover rounded-2xl p-6 cursor-pointer"
-      initial={{ opacity: 0, y: 30 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ delay: index * 0.08, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -4, boxShadow: '0 16px 48px rgba(0,0,0,0.5)', borderColor: 'rgba(34,197,94,0.2)' }}
-    >
-      <motion.div
-        className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
-        style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.2)', color: '#22C55E' }}
-        whileHover={{ scale: 1.12, rotate: -6, background: 'rgba(34,197,94,0.2)' }}
-        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-      >
-        {icon}
-      </motion.div>
-      <h3 className="font-semibold text-text-primary mb-2">{title}</h3>
-      <p className="text-text-muted text-sm leading-relaxed">{desc}</p>
-    </motion.div>
-  );
-}
-
-const features = [
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>),
-    title: 'SIP & Lump Sum Calculator',
-    desc: 'Industry-standard formulas cross-verified against leading platforms. Precise projections for both investment types.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>),
-    title: 'AI Financial Advisor',
-    desc: 'Personalized investment advice written in plain language — tailored to your risk profile, goals, and time horizon.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>),
-    title: 'Visual Dashboard',
-    desc: 'Beautiful charts show your wealth journey year by year. See exactly when your corpus hits key milestones.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>),
-    title: 'PDF & PPT Reports',
-    desc: 'Download a professional, print-ready report of your plan. Share it with family or your financial advisor.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>),
-    title: 'Instant Email Delivery',
-    desc: 'Your complete report is emailed instantly after generation — no sign-up required. Just enter your email and phone.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>),
-    title: 'Bank-Grade Security',
-    desc: 'Your personal data is encrypted and stored securely. We never share or sell your information.',
-  },
-  {
-    icon: (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>),
-    title: 'PAN KYC Verification',
-    desc: 'Instantly check your KYC status using your PAN card. Connected to NSDL & CDSL registries for real-time verification.',
-  },
-];
 
 export default function HomePage() {
   const [phase, setPhase] = useState<'form' | 'results'>('form');
@@ -218,106 +154,7 @@ export default function HomePage() {
       <Navbar />
 
       {/* ── Hero ─────────────────────────────────────── */}
-      <section id="home" ref={heroRef} className="relative overflow-hidden" style={{ paddingTop: 120, paddingBottom: 80 }}>
-        {/* Parallax orbs */}
-        <motion.div
-          className="hero-orb"
-          style={{ width: 500, height: 500, background: 'rgba(34,197,94,0.08)', top: -100, left: -100, y: orbY }}
-        />
-        <motion.div
-          className="hero-orb"
-          style={{ width: 400, height: 400, background: 'rgba(59,130,246,0.06)', top: 0, right: -80 }}
-          animate={{ scale: [1, 1.1, 1], opacity: [0.6, 1, 0.6] }}
-          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="hero-orb"
-          style={{ width: 300, height: 300, background: 'rgba(34,197,94,0.05)', bottom: 0, left: '50%', translateX: '-50%' }}
-          animate={{ scale: [1, 1.15, 1] }}
-          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
-        />
-
-        <div className="relative max-w-6xl mx-auto px-6 text-center">
-          {/* Badge */}
-          <motion.div
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
-            style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)' }}
-            initial={{ opacity: 0, y: -20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <motion.div
-              className="w-2 h-2 rounded-full bg-brand-green"
-              animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            />
-            <span className="text-brand-green text-xs font-semibold tracking-wide">AI-Powered Financial Planning</span>
-          </motion.div>
-
-          {/* Headline words animate in one at a time */}
-          <div className="overflow-hidden mb-6">
-            <motion.h1
-              className="text-5xl sm:text-6xl md:text-7xl font-bold text-text-primary leading-tight"
-              initial={{ opacity: 0, y: 60 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            >
-              Grow Your Wealth
-              <br />
-              <motion.span
-                className="gradient-text"
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              >
-                Intelligently
-              </motion.span>
-            </motion.h1>
-          </div>
-
-          <motion.p
-            className="text-text-secondary text-lg md:text-xl max-w-2xl mx-auto mb-8 leading-relaxed"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          >
-            Market Minds Investment helps you plan, calculate, and visualize your financial future.
-            Get personalized SIP & lump sum projections with AI-driven insights — free, instant, and secure.
-          </motion.p>
-
-          <motion.div
-            className="flex flex-col sm:flex-row gap-4 justify-center items-center"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.6 }}
-          >
-            <motion.a
-              href="#calculator"
-              className="btn-primary text-base px-8 py-4"
-              style={{ textDecoration: 'none' }}
-              whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(34,197,94,0.45)' }}
-              whileTap={{ scale: 0.97 }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              Start Planning Free
-            </motion.a>
-            <motion.a
-              href="#features"
-              className="btn-secondary text-base px-8 py-4"
-              style={{ textDecoration: 'none' }}
-              whileHover={{ scale: 1.04, borderColor: '#22C55E', color: '#22C55E' }}
-              whileTap={{ scale: 0.97 }}
-            >
-              Explore Features
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </motion.a>
-          </motion.div>
-        </div>
-      </section>
+      <Hero />
 
       {/* ── Stats ─────────────────────────────────────── */}
       <section id="about" className="py-16 px-6">
@@ -340,29 +177,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Features ──────────────────────────────────── */}
-      <section id="features" className="section-padding">
-        <div className="max-w-6xl mx-auto">
-          <motion.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <p className="text-brand-green text-xs font-semibold tracking-widest uppercase mb-3">Everything You Need</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-text-primary mb-4">A Complete Financial Planning Suite</h2>
-            <p className="text-text-secondary max-w-xl mx-auto">
-              Seven intelligent agents working together to deliver the most accurate, personalized investment plan possible.
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {features.map((f, i) => (
-              <FeatureCard key={i} icon={f.icon} title={f.title} desc={f.desc} index={i} />
-            ))}
-          </div>
-        </div>
-      </section>
+      <FeaturesScroll />
 
       {/* ── Calculator Section ─────────────────────────── */}
       <section id="calculator" className="section-padding">
